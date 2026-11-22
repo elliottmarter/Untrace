@@ -34,7 +34,7 @@ PICK_ORDER = "COALESCE(NULLIF(vault_updated, ''), imported_at) ASC, id ASC"
 
 SORTS = {
     "name": "name COLLATE NOCASE",
-    "domain": "domain, name COLLATE NOCASE",
+    "domain": "domain COLLATE NOCASE, name COLLATE NOCASE",
     "status": "status, name COLLATE NOCASE",
     "updated": "COALESCE(NULLIF(vault_updated, ''), imported_at), name COLLATE NOCASE",
 }
@@ -301,9 +301,6 @@ def get_stats(conn):
         "pct": round(100 * done / target) if target else 0,
         "reviewed_pct": round(100 * (total - counts["unreviewed"]) / total) if total else 0,
         "segments": [(key, label, counts[key]) for key, label in STATUSES.items() if counts[key]],
-        "processed_today": conn.execute(
-            "SELECT COUNT(DISTINCT account_id) FROM events WHERE day = ?", (today(),)
-        ).fetchone()[0],
     }
 
 
@@ -339,7 +336,6 @@ def cleanup_page():
         followups=followups,
         vault_cleanup=vault_cleanup,
         stats=get_stats(conn),
-        day=now(),
         follow_up_days=FOLLOW_UP_DAYS,
     )
 
@@ -372,12 +368,16 @@ def triage():
     return render_template("triage.html", account=account, stats=get_stats(conn))
 
 
-@app.get("/accounts")
-def accounts():
-    conn = db.get_db()
-    q = request.args.get("q", "").strip()
-    status = request.args.get("status", "")
-    sort = request.args.get("sort", "name")
+# Names for the list you came from, shown on the account page ("4 of 37 in To delete").
+LIST_NAMES = {**STATUSES, "snoozed": "Snoozed", "vault": "Deleted but still in vault"}
+
+
+def list_view(conn, args, keep_id=None):
+    """The Accounts list for a search/filter/sort. keep_id stays in the list even if it no longer
+    matches, so the account you just changed keeps its place while you step through the list."""
+    q = args.get("q", "").strip()
+    status = args.get("status", "")
+    sort = args.get("sort", "name")
     where, params = [], []
     if status in STATUSES:
         where.append("status = ?")
@@ -392,10 +392,42 @@ def accounts():
         params += [f"%{q}%"] * 5
     sql = "SELECT * FROM accounts"
     if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY " + SORTS.get(sort, SORTS["name"])
+        sql += " WHERE (" + " AND ".join(where) + ")"
+        if keep_id:
+            sql += " OR id = ?"
+            params.append(keep_id)
+    key = sort.lstrip("-")
+    if key not in SORTS:
+        key, sort = "name", "name"
+    by_name = "name COLLATE NOCASE"
+    main_col = {
+        "name": by_name,
+        "domain": "domain COLLATE NOCASE",
+        # Status sorts in the same order as the bar, not alphabetically.
+        "status": "CASE status " + " ".join(f"WHEN '{k}' THEN {i}" for i, k in enumerate(STATUSES)) + " END",
+        "updated": "COALESCE(NULLIF(vault_updated, ''), imported_at)",
+    }[key]
+    # Descending reverses the column you sorted by; ties still read A to Z.
+    order = main_col + (" DESC" if sort.startswith("-") else "")
+    if key != "name":
+        order += ", " + by_name
+    sql += " ORDER BY " + order
     rows = conn.execute(sql, params).fetchall()
-    return render_template("accounts.html", rows=rows, q=q, status=status, sort=sort)
+    # Only the parts that differ from the default, so links stay short.
+    list_args = {k: v for k, v in (("q", q), ("status", status), ("sort", "" if sort == "name" else sort)) if v}
+    name = LIST_NAMES.get(status) or "All accounts"
+    if q:
+        name = f'"{q}"' + ("" if name == "All accounts" else f" in {name}")
+    return rows, list_args, name, q, status, sort
+
+
+@app.get("/accounts")
+def accounts():
+    conn = db.get_db()
+    rows, list_args, _, q, status, sort = list_view(conn, request.args)
+    return render_template(
+        "accounts.html", rows=rows, q=q, status=status, sort=sort, list_args=list_args, stats=get_stats(conn),
+    )
 
 
 @app.post("/accounts/bulk")
@@ -415,10 +447,30 @@ def bulk_update():
 @app.get("/account/<int:account_id>")
 def account_detail(account_id):
     conn = db.get_db()
+    a = get_account(conn, account_id)
     events = conn.execute(
         "SELECT * FROM events WHERE account_id = ? ORDER BY at DESC, id DESC", (account_id,)
     ).fetchall()
-    return render_template("account.html", a=get_account(conn, account_id), events=events)
+    # Where you came from: the same search, filter and sort as the list, carried in the URL.
+    rows, list_args, list_name, *_ = list_view(conn, request.args)
+    matches = any(r["id"] == account_id for r in rows)
+    if not matches:
+        # e.g. just marked Deleted while working through To delete: keep its place in the list.
+        rows = list_view(conn, request.args, keep_id=account_id)[0]
+    ids = [r["id"] for r in rows]
+    nav = None
+    if account_id in ids:
+        pos = ids.index(account_id)
+        nav = {
+            "pos": pos + 1,
+            "total": len(ids),
+            "prev": rows[pos - 1] if pos > 0 else None,
+            "next": rows[pos + 1] if pos + 1 < len(ids) else None,
+        }
+    return render_template(
+        "account.html", a=a, events=events, nav=nav, matches=matches,
+        list_args=list_args, list_name=list_name,
+    )
 
 
 @app.post("/account/<int:account_id>")
@@ -431,7 +483,7 @@ def account_save(account_id):
     conn.commit()
     if request.headers.get("X-Requested-With") == "fetch":
         return "", 204  # autosave from the account page
-    return redirect(url_for("account_detail", account_id=account_id))
+    return redirect(safe_next(url_for("account_detail", account_id=account_id)))
 
 
 @app.post("/account/<int:account_id>/status")
@@ -491,7 +543,8 @@ def remove_account(account_id):
     name = get_account(conn, account_id)["name"]
     conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
     conn.commit()
-    return redirect(url_for("accounts"))
+    flash(f"Removed {name} from the tracker.", "info")
+    return redirect(safe_next(url_for("accounts")))
 
 
 # --- import / export -----------------------------------------------------------

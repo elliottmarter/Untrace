@@ -1,27 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Accounts · Account Cleanup{% endblock %}
 {% block content %}
-<h1>Accounts <span class="muted">· {{ rows|length }}</span></h1>
+<h1>Accounts <span class="muted">· <span id="row-count">{{ rows|length }}</span></span></h1>
+<p class="muted">
+  Every account you're tracking. Search as you type, click a column heading to sort, and click a
+  section of the bar to show just that status. Click the same section again to show everything.
+</p>
 
-<form method="get" class="filters">
-  <input type="search" name="q" value="{{ q }}" placeholder="Search name, domain, username, notes…">
-  <select name="status">
-    <option value="">All statuses</option>
-    {% for key, label in STATUSES.items() %}
-      <option value="{{ key }}" {{ 'selected' if status == key }}>{{ label }}</option>
-    {% endfor %}
-    <option value="snoozed" {{ 'selected' if status == 'snoozed' }}>Snoozed</option>
-    <option value="vault" {{ 'selected' if status == 'vault' }}>Deleted but still in vault</option>
-  </select>
-  <select name="sort">
-    <option value="name" {{ 'selected' if sort == 'name' }}>Sort by name</option>
-    <option value="domain" {{ 'selected' if sort == 'domain' }}>Sort by domain</option>
-    <option value="status" {{ 'selected' if sort == 'status' }}>Sort by status</option>
-    <option value="updated" {{ 'selected' if sort == 'updated' }}>Oldest first</option>
-  </select>
-  <button class="btn small">Filter</button>
+{% if stats.total %}
+<section class="stats" id="stats">
+  <div class="progress-label">
+    <strong>{{ stats.done }}</strong> of {{ stats.target }} accounts cleaned up
+    <span class="muted">({{ stats.pct }}%)</span>
+  </div>
+  {% with active = status, seg_args = {'q': q or None, 'sort': list_args.sort} %}{% include "_segbar.html" %}{% endwith %}
+</section>
+{% endif %}
+
+<form method="get" class="filters" id="search-form" role="search">
+  <input type="search" name="q" value="{{ q }}" placeholder="Search name, domain, username, notes…"
+         aria-label="Search accounts" autocomplete="off">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+  {% if list_args.sort %}<input type="hidden" name="sort" value="{{ list_args.sort }}">{% endif %}
 </form>
 
+<div id="results">
+{% if status in ('vault', 'snoozed') %}
+  <p class="filter-note">Showing <b>{{ 'Deleted but still in vault' if status == 'vault' else 'Snoozed' }}</b> ·
+    <a href="{{ url_for('accounts', q=q or None, sort=list_args.sort) }}">Show all</a></p>
+{% endif %}
 {% if rows %}
 <form method="post" action="{{ url_for('bulk_update') }}">
   <input type="hidden" name="next" value="{{ request.full_path }}">
@@ -35,15 +42,25 @@
   </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th></th><th>Name</th><th>Username</th><th>Status</th><th>Last touched</th></tr></thead>
+      {# Click a heading to sort by it; click again to reverse. #}
+      {% macro sort_th(key, label) -%}
+        {%- set cur = sort.lstrip('-') == key -%}
+        {%- set desc = sort == '-' ~ key -%}
+        {%- set target = ('-' ~ key) if cur and not desc else key -%}
+        <th aria-sort="{{ ('descending' if desc else 'ascending') if cur else 'none' }}">
+          <a class="sort{{ ' on' if cur }}" href="{{ url_for('accounts', q=q or None, status=status or None, sort=None if target == 'name' else target) }}">{{ label }}<span class="sort-arrow" aria-hidden="true">{{ ('↓' if desc else '↑') if cur else '↕' }}</span></a>
+        </th>
+      {%- endmacro %}
+      <thead><tr><th></th>{{ sort_th('name', 'Name') }}{{ sort_th('domain', 'Domain') }}<th>Username</th>{{ sort_th('status', 'Status') }}<th>Last touched</th></tr></thead>
       <tbody>
       {% for a in rows %}
-        <tr>
+        <tr id="a-{{ a.id }}">
           <td><input type="checkbox" name="ids" value="{{ a.id }}"></td>
           <td>
-            <a href="{{ url_for('account_detail', account_id=a.id) }}">{{ a.name }}</a>
-            {% if a.domain and a.domain != a.name|lower %}<div class="muted small">{{ a.domain }}</div>{% endif %}
+            {# The account page keeps this list's search, filter and sort for its back link and Previous / Next. #}
+            <a href="{{ url_for('account_detail', account_id=a.id, **list_args) }}">{{ a.name }}</a>
           </td>
+          <td class="small">{{ a.domain }}</td>
           <td class="small">{{ a.username }}</td>
           <td><span class="badge st-{{ a.status }}">{{ STATUSES[a.status] }}</span>
             {% if a.status in CLOSED and not a.vault_removed %}<div class="muted small">still in vault</div>{% endif %}</td>
@@ -57,11 +74,44 @@
 {% else %}
   <section class="empty"><p>No accounts match.</p></section>
 {% endif %}
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
-  const all = document.getElementById("select-all");
-  if (all) all.addEventListener("change", () =>
-    document.querySelectorAll('input[name="ids"]').forEach((cb) => (cb.checked = all.checked)));
+  // Select all (delegated, so it keeps working after the results are swapped).
+  document.addEventListener("change", (e) => {
+    if (e.target.id !== "select-all") return;
+    document.querySelectorAll('input[name="ids"]').forEach((cb) => (cb.checked = e.target.checked));
+  });
+
+  // Live search: results update as you type. The URL follows along, so reload, Back and the
+  // account page's back link all return to the same search. Enter still works without JavaScript.
+  (() => {
+    const form = document.getElementById("search-form");
+    const box = form.querySelector('input[name="q"]');
+    let timer = null, latest = 0;
+    const run = () => {
+      const params = new URLSearchParams(new FormData(form));
+      if (!params.get("q")) params.delete("q");
+      const url = form.action.split("?")[0] + (params.toString() ? "?" + params : "");
+      const ticket = ++latest;
+      fetch(url, { headers: { "X-Requested-With": "fetch-page" } })
+        .then((r) => { if (!r.ok || new URL(r.url).pathname !== location.pathname) throw 0; return r.text(); })
+        .then((html) => {
+          if (ticket !== latest) return;  // a newer search won
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          for (const id of ["results", "stats"]) {
+            const fresh = doc.getElementById(id), old = document.getElementById(id);
+            if (fresh && old) old.replaceWith(fresh);
+          }
+          document.getElementById("row-count").textContent = doc.getElementById("row-count").textContent;
+          if (window.fitSegments) fitSegments();
+          history.replaceState({}, "", url);
+        })
+        .catch(() => { form.submit(); });
+    };
+    box.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 200); });
+    form.addEventListener("submit", (e) => { e.preventDefault(); clearTimeout(timer); run(); });
+  })();
 </script>
 {% endblock %}

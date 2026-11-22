@@ -88,7 +88,8 @@
       form.appendChild(field);
       box.classList.add("slide-out");
       let sent = false;
-      const go = () => { if (!sent) { sent = true; form.submit(); } };
+      // requestSubmit lets the account page's own submit handler see it too.
+      const go = () => { if (!sent) { sent = true; form.requestSubmit ? form.requestSubmit() : form.submit(); } };
       box.addEventListener("animationend", go);
       setTimeout(go, 500);
     });

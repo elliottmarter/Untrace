@@ -1,9 +1,24 @@
 {% extends "base.html" %}
 {% block title %}{{ a.name }} · Account Cleanup{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('accounts') }}">← All accounts</a></p>
+{% set here = url_for('account_detail', account_id=a.id, **list_args) %}
+{% set list_url = url_for('accounts', **list_args) %}
+<nav class="list-nav" aria-label="Accounts in this list">
+  <a class="list-back" href="{{ list_url }}#a-{{ a.id }}">← {{ list_name }}</a>
+  {% if nav %}
+  <span class="list-pos muted">
+    {{ nav.pos }} of {{ nav.total }} in {{ list_name }}{% if not matches %} · <span title="This account no longer matches the list. It keeps its place until you move on.">no longer matches</span>{% endif %}
+  </span>
+  <span class="list-steps">
+    {% if nav.prev %}<a class="btn small" id="prev" href="{{ url_for('account_detail', account_id=nav.prev.id, **list_args) }}" title="{{ nav.prev.name }} (K or ←)">← Previous</a>
+    {% else %}<span class="btn small disabled" aria-disabled="true">← Previous</span>{% endif %}
+    {% if nav.next %}<a class="btn small" id="next" href="{{ url_for('account_detail', account_id=nav.next.id, **list_args) }}" title="{{ nav.next.name }} (J or →)">Next →</a>
+    {% else %}<span class="btn small disabled" aria-disabled="true">Next →</span>{% endif %}
+  </span>
+  {% endif %}
+</nav>
 
-{% with next_url = url_for('account_detail', account_id=a.id), detail = true %}{% include "_card.html" %}{% endwith %}
+{% with next_url = here, detail = true %}{% include "_card.html" %}{% endwith %}
 
 <section class="panel">
   <h2 class="details-title">Details</h2>
@@ -39,6 +54,7 @@
 <form method="post" action="{{ url_for('remove_account', account_id=a.id) }}"
       data-msg="Remove {{ a.name }} from the tracker? This only removes it from this app."
       onsubmit="return confirm(this.dataset.msg);">
+  <input type="hidden" name="next" value="{{ list_url }}">
   <button class="btn small ghost">Remove from tracker</button>
 </form>
 {% endblock %}
@@ -79,25 +95,43 @@
   detailsForm.addEventListener("focusout", save);
   detailsForm.addEventListener("submit", (e) => { e.preventDefault(); save(); });
 
-  // Save first, then carry on with whatever was clicked.
+  // Buttons on this page (status, vault, remove) save the notes first, then send the form in the
+  // background and swap the page in place, so changing a status doesn't add a Back-button step.
   document.addEventListener("submit", (e) => {
     const form = e.target;
-    if (form === detailsForm || snapshot() === saved || e.defaultPrevented) return;
+    if (form === detailsForm || e.defaultPrevented || form.method !== "post") return;
     e.preventDefault();
-    save().finally(() => {
-      // form.submit() skips submit handlers (no second confirm), so carry the clicked button's value by hand.
-      if (e.submitter && e.submitter.name) {
-        form.append(Object.assign(document.createElement("input"),
-          { type: "hidden", name: e.submitter.name, value: e.submitter.value }));
-      }
-      form.submit();
-    });
+    const body = new FormData(form);
+    if (e.submitter && e.submitter.name) body.append(e.submitter.name, e.submitter.value);
+    save()
+      .then(() => fetch(form.action, { method: "POST", body }))
+      .then((r) => {
+        if (!r.ok || new URL(r.url).pathname === "/login") throw new Error(r.status);
+        location.replace(r.url);
+      })
+      .catch(() => {
+        // Fall back to an ordinary submit, carrying the clicked button's value by hand.
+        if (e.submitter && e.submitter.name) {
+          form.append(Object.assign(document.createElement("input"),
+            { type: "hidden", name: e.submitter.name, value: e.submitter.value }));
+        }
+        form.submit();
+      });
   });
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[href]");
     if (!link || link.target === "_blank" || snapshot() === saved) return;
     e.preventDefault();
     save().finally(() => { location.href = link.href; });
+  });
+  // J / K or the arrow keys step through the list (when you're not typing).
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, textarea, select, [contenteditable]")) return;
+    const id = { ArrowRight: "next", j: "next", ArrowLeft: "prev", k: "prev" }[e.key];
+    const link = id && document.getElementById(id);
+    if (!link) return;
+    e.preventDefault();
+    link.click();
   });
   // Closing the tab or using the back button: send what's there (keepalive lets it finish).
   window.addEventListener("pagehide", save);
