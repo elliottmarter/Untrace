@@ -247,44 +247,15 @@ tr:last-child td { border-bottom: none; }
 .topbar-right { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .theme-picker { font-size: .85rem; padding: .25rem .4rem; }
 
-/* Accounts: the open account on the left, the list on the right. */
-main.wide { max-width: 1500px; }
-.browser { display: grid; gap: 1.5rem; }
-.pane-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin: 1.5rem 0 -.25rem; }
-.back-to-list { text-decoration: none; }
-.pane-close { color: var(--muted); text-decoration: none; font-size: 1.5rem; line-height: 1; padding: 0 .3rem; border-radius: 6px; }
-.pane-close:hover { background: var(--border); color: var(--text); }
-.pane-empty { background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); padding: 2.5rem 1.5rem; margin-top: 4.1rem; text-align: center; }
-.account-list tbody tr { cursor: pointer; }
-.account-list tbody tr:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
-.account-list tr.selected { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
-.account-list tr.selected:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
-.account-list tr.stale { opacity: .65; }
-.account-list .row-link { color: inherit; font-weight: 600; text-decoration: none; }
-.account-list td:first-child { width: 2rem; }
 
-/* Wide screens: the list is docked to the left edge and the open account fills the rest.
-   Each pane scrolls on its own, so the list keeps its place while you work. */
-@media (min-width: 900px) {
-  main.wide { max-width: none; padding: 0; }
-  .browser {
-    grid-template-columns: minmax(340px, 32%) minmax(0, 1fr); gap: 0;
-    height: calc(100vh - var(--topbar-h, 3.6rem));
-  }
-  .browser > section { height: 100%; overflow-y: auto; scrollbar-gutter: stable; }
-  .list-pane { order: -1; background: var(--surface); border-right: 1px solid var(--border); padding: 0 1rem 2rem; }
-  .list-pane .table-wrap { border: 0; border-radius: 0; margin: 0 -1rem; overflow-x: visible; }
-  .list-pane .filters input[type="search"] { min-width: 0; flex-basis: 100%; }
-  .detail-pane { padding: 0 2rem 3rem; }
-  .detail-pane > * { max-width: 900px; }
-  .back-to-list { visibility: hidden; }
-  .col-touched { display: none; }
-}
-@media (min-width: 1500px) { .col-touched { display: table-cell; } }
-
-/* Phones and narrow windows: one pane at a time, with a link back to the list. */
-@media (max-width: 899px) {
-  .browser:not(.has-selection) .detail-pane { display: none; }
-  .browser.has-selection .list-pane { display: none; }
-  .pane-close { display: none; }
-}
+/* Account page: back to the list you came from, and step through it. */
+.list-nav { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin: 1.5rem 0 1rem; }
+.list-back { text-decoration: none; font-weight: 600; }
+.list-pos { margin-left: auto; font-size: .9rem; }
+.list-steps { display: flex; gap: .5rem; }
+@media (max-width: 600px) { .list-pos { margin-left: 0; flex-basis: 100%; order: 3; } .list-steps { margin-left: auto; } }
+/* Coming back from an account: its row is briefly highlighted. */
+tr[id] { scroll-margin-top: 30vh; }
+tr:target { animation: row-flash 2s ease-out; }
+@keyframes row-flash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } }
+@media (prefers-reduced-motion: reduce) { tr:target { animation: none; background: color-mix(in srgb, var(--accent) 12%, transparent); } }

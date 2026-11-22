@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}{{ a.name }} · Account Cleanup{% endblock %}
+{% block content %}
+{% set here = url_for('account_detail', account_id=a.id, **list_args) %}
+{% set list_url = url_for('accounts', **list_args) %}
+<nav class="list-nav" aria-label="Accounts in this list">
+  <a class="list-back" href="{{ list_url }}#a-{{ a.id }}">← {{ list_name }}</a>
+  {% if nav %}
+  <span class="list-pos muted">
+    {{ nav.pos }} of {{ nav.total }} in {{ list_name }}{% if not matches %} · <span title="This account no longer matches the list. It keeps its place until you move on.">no longer matches</span>{% endif %}
+  </span>
+  <span class="list-steps">
+    {% if nav.prev %}<a class="btn small" id="prev" href="{{ url_for('account_detail', account_id=nav.prev.id, **list_args) }}" title="{{ nav.prev.name }} (K or ←)">← Previous</a>
+    {% else %}<span class="btn small disabled" aria-disabled="true">← Previous</span>{% endif %}
+    {% if nav.next %}<a class="btn small" id="next" href="{{ url_for('account_detail', account_id=nav.next.id, **list_args) }}" title="{{ nav.next.name }} (J or →)">Next →</a>
+    {% else %}<span class="btn small disabled" aria-disabled="true">Next →</span>{% endif %}
+  </span>
+  {% endif %}
+</nav>
+
+{% with next_url = here, detail = true %}{% include "_card.html" %}{% endwith %}
+
+<section class="panel">
+  <h2 class="details-title">Details</h2>
+  <dl class="details">
+    <dt>URL</dt><dd>{% if a.url|weburl %}<a href="{{ a.url|weburl }}" target="_blank" rel="noopener noreferrer">{{ a.url }}</a>{% else %}{{ a.url or '—' }}{% endif %}</dd>
+    <dt>Username</dt><dd>{{ a.username or '—' }}</dd>
+    <dt>Imported</dt><dd>{{ a.imported_at|nicedate }}</dd>
+    {% if a.snoozed_until %}<dt>Snoozed until</dt><dd>{{ a.snoozed_until|nicedate }}</dd>{% endif %}
+    {% if a.vault_id %}<dt>Bitwarden</dt><dd>{{ 'Removed from vault' if a.vault_removed else 'Linked to vault item' }}</dd>{% endif %}
+  </dl>
+
+  <form method="post" action="{{ url_for('account_save', account_id=a.id) }}" class="stack" id="details-form">
+    <label>Notes
+      <textarea name="notes" rows="4" placeholder="e.g. emailed support 3 Nov, ticket #1234">{{ a.notes }}</textarea>
+    </label>
+    <span class="muted small" id="save-state" role="status" aria-live="polite">Changes save automatically.</span>
+  </form>
+</section>
+
+<section class="panel">
+  <h2 class="details-title">History</h2>
+  {% if events %}
+    <ul class="history">
+      {% for e in events %}
+        <li><span class="muted">{{ e.at|nicedate }}</span> {{ STATUSES.get(e.from_status, e.from_status) }} → <b>{{ STATUSES.get(e.to_status, e.to_status) }}</b></li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No changes yet.</p>
+  {% endif %}
+</section>
+
+<form method="post" action="{{ url_for('remove_account', account_id=a.id) }}" data-leaves="1"
+      data-msg="Remove {{ a.name }} from the tracker? This only removes it from this app."
+      onsubmit="return confirm(this.dataset.msg);">
+  <input type="hidden" name="next" value="{{ list_url }}">
+  <button class="btn small ghost">Remove from tracker</button>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+  // Notes save themselves: shortly after you stop typing, when you click away, and before any
+  // other button or link on the page takes you away.
+  const detailsForm = document.getElementById("details-form");
+  const state = document.getElementById("save-state");
+  const snapshot = () => new URLSearchParams(new FormData(detailsForm)).toString();
+  let saved = snapshot();
+  let timer = null;
+  let inFlight = Promise.resolve();
+
+  const save = () => {
+    clearTimeout(timer);
+    const body = snapshot();
+    if (body === saved) return inFlight;
+    state.textContent = "Saving…";
+    inFlight = fetch(detailsForm.action, {
+      method: "POST", body: new URLSearchParams(body), keepalive: true,
+      headers: { "X-Requested-With": "fetch" },
+    }).then((r) => {
+      if (!r.ok) throw new Error(r.status);
+      saved = body;
+      state.textContent = snapshot() === saved ? "Saved" : "Unsaved changes";
+    }).catch(() => {
+      state.textContent = "Couldn't save. Check you're still signed in and try again.";
+    });
+    return inFlight;
+  };
+
+  detailsForm.addEventListener("input", (e) => {
+    state.textContent = "Unsaved changes";
+    clearTimeout(timer);
+    timer = setTimeout(save, 800);
+  });
+  detailsForm.addEventListener("focusout", save);
+  detailsForm.addEventListener("submit", (e) => { e.preventDefault(); save(); });
+
+  // Buttons on this page (status, vault, remove) save the notes first, then send the form in the
+  // background and swap the page in place, so changing a status doesn't add a Back-button step.
+  document.addEventListener("submit", (e) => {
+    const form = e.target;
+    if (form === detailsForm || e.defaultPrevented || form.method !== "post") return;
+    e.preventDefault();
+    const body = new FormData(form);
+    if (e.submitter && e.submitter.name) body.append(e.submitter.name, e.submitter.value);
+    save()
+      .then(() => fetch(form.action, { method: "POST", body }))
+      .then((r) => {
+        if (!r.ok || new URL(r.url).pathname === "/login") throw new Error(r.status);
+        location.replace(r.url);
+      })
+      .catch(() => {
+        // Fall back to an ordinary submit, carrying the clicked button's value by hand.
+        if (e.submitter && e.submitter.name) {
+          form.append(Object.assign(document.createElement("input"),
+            { type: "hidden", name: e.submitter.name, value: e.submitter.value }));
+        }
+        form.submit();
+      });
+  });
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("a[href]");
+    if (!link || link.target === "_blank" || snapshot() === saved) return;
+    e.preventDefault();
+    save().finally(() => { location.href = link.href; });
+  });
+  // J / K or the arrow keys step through the list (when you're not typing).
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, textarea, select, [contenteditable]")) return;
+    const id = { ArrowRight: "next", j: "next", ArrowLeft: "prev", k: "prev" }[e.key];
+    const link = id && document.getElementById(id);
+    if (!link) return;
+    e.preventDefault();
+    link.click();
+  });
+  // Closing the tab or using the back button: send what's there (keepalive lets it finish).
+  window.addEventListener("pagehide", save);
+</script>
+{% endblock %}

@@ -368,14 +368,16 @@ def triage():
     return render_template("triage.html", account=account, stats=get_stats(conn))
 
 
-@app.get("/accounts")
-def accounts():
-    """The account list on the right, with the selected account (?id=) open beside it on the left."""
-    conn = db.get_db()
-    q = request.args.get("q", "").strip()
-    status = request.args.get("status", "")
-    sort = request.args.get("sort", "name")
-    selected_id = request.args.get("id", type=int)
+# Names for the list you came from, shown on the account page ("4 of 37 in To delete").
+LIST_NAMES = {**STATUSES, "snoozed": "Snoozed", "vault": "Deleted but still in vault"}
+
+
+def list_view(conn, args, keep_id=None):
+    """The Accounts list for a search/filter/sort. keep_id stays in the list even if it no longer
+    matches, so the account you just changed keeps its place while you step through the list."""
+    q = args.get("q", "").strip()
+    status = args.get("status", "")
+    sort = args.get("sort", "name")
     where, params = [], []
     if status in STATUSES:
         where.append("status = ?")
@@ -388,33 +390,26 @@ def accounts():
     if q:
         where.append("(name LIKE ? OR domain LIKE ? OR username LIKE ? OR folder LIKE ? OR notes LIKE ?)")
         params += [f"%{q}%"] * 5
-    sql = "SELECT *, 1 AS matches FROM accounts"
+    sql = "SELECT * FROM accounts"
     if where:
-        match = " AND ".join(where)
-        sql = f"SELECT *, ({match}) AS matches FROM accounts WHERE ({match})"
-        params = params * 2
-        if selected_id:
-            # The open account stays in the list after a change moves it out of the filter, so the
-            # list doesn't jump while you work on it. It drops out once you pick another one.
+        sql += " WHERE (" + " AND ".join(where) + ")"
+        if keep_id:
             sql += " OR id = ?"
-            params.append(selected_id)
+            params.append(keep_id)
     sql += " ORDER BY " + SORTS.get(sort, SORTS["name"])
     rows = conn.execute(sql, params).fetchall()
+    # Only the parts that differ from the default, so links stay short.
+    list_args = {k: v for k, v in (("q", q), ("status", status), ("sort", "" if sort == "name" else sort)) if v}
+    name = LIST_NAMES.get(status) or "All accounts"
+    if q:
+        name = f'"{q}"' + ("" if name == "All accounts" else f" in {name}")
+    return rows, list_args, name, q, status, sort
 
-    selected = events = None
-    if selected_id:
-        selected = conn.execute("SELECT * FROM accounts WHERE id = ?", (selected_id,)).fetchone()
-        if selected:
-            events = conn.execute(
-                "SELECT * FROM events WHERE account_id = ? ORDER BY at DESC, id DESC", (selected_id,)
-            ).fetchall()
-    # Links keep the current search, filter and sort.
-    list_args = {k: v for k, v in (("q", q), ("status", status), ("sort", sort if sort != "name" else "")) if v}
-    return render_template(
-        "accounts.html", rows=rows, q=q, status=status, sort=sort,
-        a=selected, events=events, list_args=list_args,
-        matching=sum(1 for r in rows if r["matches"]),
-    )
+
+@app.get("/accounts")
+def accounts():
+    rows, list_args, _, q, status, sort = list_view(db.get_db(), request.args)
+    return render_template("accounts.html", rows=rows, q=q, status=status, sort=sort, list_args=list_args)
 
 
 @app.post("/accounts/bulk")
@@ -433,9 +428,31 @@ def bulk_update():
 
 @app.get("/account/<int:account_id>")
 def account_detail(account_id):
-    """Accounts open in the panel beside the list."""
-    get_account(db.get_db(), account_id)
-    return redirect(url_for("accounts", id=account_id))
+    conn = db.get_db()
+    a = get_account(conn, account_id)
+    events = conn.execute(
+        "SELECT * FROM events WHERE account_id = ? ORDER BY at DESC, id DESC", (account_id,)
+    ).fetchall()
+    # Where you came from: the same search, filter and sort as the list, carried in the URL.
+    rows, list_args, list_name, *_ = list_view(conn, request.args)
+    matches = any(r["id"] == account_id for r in rows)
+    if not matches:
+        # e.g. just marked Deleted while working through To delete: keep its place in the list.
+        rows = list_view(conn, request.args, keep_id=account_id)[0]
+    ids = [r["id"] for r in rows]
+    nav = None
+    if account_id in ids:
+        pos = ids.index(account_id)
+        nav = {
+            "pos": pos + 1,
+            "total": len(ids),
+            "prev": rows[pos - 1] if pos > 0 else None,
+            "next": rows[pos + 1] if pos + 1 < len(ids) else None,
+        }
+    return render_template(
+        "account.html", a=a, events=events, nav=nav, matches=matches,
+        list_args=list_args, list_name=list_name,
+    )
 
 
 @app.post("/account/<int:account_id>")
@@ -448,7 +465,7 @@ def account_save(account_id):
     conn.commit()
     if request.headers.get("X-Requested-With") == "fetch":
         return "", 204  # autosave from the account page
-    return redirect(url_for("account_detail", account_id=account_id))
+    return redirect(safe_next(url_for("account_detail", account_id=account_id)))
 
 
 @app.post("/account/<int:account_id>/status")
