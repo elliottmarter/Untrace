@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block title %}Cleanup · Account Cleanup{% endblock %}
 {% block content %}
 {% if not stats.total %}
   <section class="empty">
@@ -7,6 +8,11 @@
     <a class="btn ok" href="{{ url_for('import_page') }}">Import accounts</a>
   </section>
 {% else %}
+  <h1>Cleanup</h1>
+  <p class="muted">
+    Work through your accounts one at a time. Accounts you queued to delete come first, then ones
+    you haven't reviewed yet, oldest first. Do as many as you like and pick up where you left off.
+  </p>
   <section class="stats">
     <div class="progress-label">
       <strong>{{ stats.done }}</strong> of {{ stats.target }} accounts cleaned up
