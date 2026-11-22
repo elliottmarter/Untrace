@@ -301,9 +301,6 @@ def get_stats(conn):
         "pct": round(100 * done / target) if target else 0,
         "reviewed_pct": round(100 * (total - counts["unreviewed"]) / total) if total else 0,
         "segments": [(key, label, counts[key]) for key, label in STATUSES.items() if counts[key]],
-        "processed_today": conn.execute(
-            "SELECT COUNT(DISTINCT account_id) FROM events WHERE day = ?", (today(),)
-        ).fetchone()[0],
     }
 
 
@@ -339,7 +336,6 @@ def cleanup_page():
         followups=followups,
         vault_cleanup=vault_cleanup,
         stats=get_stats(conn),
-        day=now(),
         follow_up_days=FOLLOW_UP_DAYS,
     )
 

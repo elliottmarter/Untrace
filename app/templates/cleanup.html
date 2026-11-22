@@ -15,8 +15,6 @@
     {% include "_segbar.html" %}
   </section>
 
-  <h1>{{ day.strftime('%A') }} {{ day.day }} {{ day.strftime('%B') }} <span class="muted">· <b>{{ stats.processed_today }}</b> processed today</span></h1>
-
   {% if pick %}
     {% with a = pick, next_url = url_for('cleanup_page', n=n), hide_notes = true %}{% include "_card.html" %}{% endwith %}
     <form method="post" action="{{ url_for('save_notes', account_id=pick.id) }}" class="panel notes-box" id="notes-form">
