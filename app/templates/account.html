@@ -51,7 +51,7 @@
   {% endif %}
 </section>
 
-<form method="post" action="{{ url_for('remove_account', account_id=a.id) }}" data-leaves="1"
+<form method="post" action="{{ url_for('remove_account', account_id=a.id) }}"
       data-msg="Remove {{ a.name }} from the tracker? This only removes it from this app."
       onsubmit="return confirm(this.dataset.msg);">
   <input type="hidden" name="next" value="{{ list_url }}">
