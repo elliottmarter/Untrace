@@ -34,7 +34,7 @@ PICK_ORDER = "COALESCE(NULLIF(vault_updated, ''), imported_at) ASC, id ASC"
 
 SORTS = {
     "name": "name COLLATE NOCASE",
-    "domain": "domain, name COLLATE NOCASE",
+    "domain": "domain COLLATE NOCASE, name COLLATE NOCASE",
     "status": "status, name COLLATE NOCASE",
     "updated": "COALESCE(NULLIF(vault_updated, ''), imported_at), name COLLATE NOCASE",
 }
@@ -396,7 +396,22 @@ def list_view(conn, args, keep_id=None):
         if keep_id:
             sql += " OR id = ?"
             params.append(keep_id)
-    sql += " ORDER BY " + SORTS.get(sort, SORTS["name"])
+    key = sort.lstrip("-")
+    if key not in SORTS:
+        key, sort = "name", "name"
+    by_name = "name COLLATE NOCASE"
+    main_col = {
+        "name": by_name,
+        "domain": "domain COLLATE NOCASE",
+        # Status sorts in the same order as the bar, not alphabetically.
+        "status": "CASE status " + " ".join(f"WHEN '{k}' THEN {i}" for i, k in enumerate(STATUSES)) + " END",
+        "updated": "COALESCE(NULLIF(vault_updated, ''), imported_at)",
+    }[key]
+    # Descending reverses the column you sorted by; ties still read A to Z.
+    order = main_col + (" DESC" if sort.startswith("-") else "")
+    if key != "name":
+        order += ", " + by_name
+    sql += " ORDER BY " + order
     rows = conn.execute(sql, params).fetchall()
     # Only the parts that differ from the default, so links stay short.
     list_args = {k: v for k, v in (("q", q), ("status", status), ("sort", "" if sort == "name" else sort)) if v}
