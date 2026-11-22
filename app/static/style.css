@@ -158,7 +158,7 @@ kbd { font-size: .75rem; opacity: .75; border: 1px solid currentColor; border-ra
 .done-row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-top: .8rem; color: var(--ok); }
 .empty { text-align: center; padding: 2rem; }
 .actions.big .btn { padding: .8rem 1.4rem; font-size: 1.05rem; }
-.triage-card h2 { margin-top: 0; font-size: 1.5rem; }
+.triage-card h2 { margin: 0; font-size: 1.5rem; }
 
 .badge { font-size: .78rem; padding: .15rem .55rem; border-radius: 99px; background: var(--bg); border: 1px solid var(--border); white-space: nowrap; }
 .badge[class*="st-"] { color: var(--st); border-color: var(--st); }
