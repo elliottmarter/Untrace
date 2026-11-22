@@ -138,11 +138,19 @@
   // no-JavaScript fallback all work. With JavaScript, only the two panes are replaced and the list
   // keeps its scroll position.
   let loading = null;
-  const swap = (html, url) => {
+  const listPane = () => document.getElementById("list-pane");
+  const detailPane = () => document.getElementById("detail-pane");
+  // The two panes scroll on their own on wide screens; size them to sit just under the top bar.
+  const fitPanes = () => document.documentElement.style.setProperty(
+    "--topbar-h", document.querySelector(".topbar").offsetHeight + "px");
+  fitPanes();
+  window.addEventListener("resize", fitPanes);
+
+  const swap = (html, url, { sameAccount = false } = {}) => {
     const doc = new DOMParser().parseFromString(html, "text/html");
     const next = doc.getElementById("browser");
     if (!next) { location.href = url; return; }
-    const y = window.scrollY;
+    const y = window.scrollY, listY = listPane().scrollTop, detailY = detailPane().scrollTop;
     browser.className = next.className;
     browser.dataset.listUrl = next.dataset.listUrl;
     for (const id of ["detail-pane", "list-pane"]) {
@@ -155,7 +163,13 @@
     initToasts(toasts);
     slideInEmail(document);
     // On a wide screen the list stays where it was; on a phone, each view starts at the top.
-    window.scrollTo(0, wide.matches ? y : 0);
+    // The account pane only keeps its place when the same account was just changed.
+    if (wide.matches) {
+      listPane().scrollTop = listY;
+      if (sameAccount) detailPane().scrollTop = detailY;
+    } else {
+      window.scrollTo(0, sameAccount ? y : 0);
+    }
     if (wide.matches) keepSelectedInView();
     bindPane();
   };
@@ -178,9 +192,8 @@
   const keepSelectedInView = () => {
     const row = document.querySelector(".account-list tr.selected");
     if (!row) return;
-    const r = row.getBoundingClientRect();
-    const top = document.querySelector(".topbar").getBoundingClientRect().bottom;
-    if (r.top < top || r.bottom > innerHeight) row.scrollIntoView({ block: "nearest" });
+    const r = row.getBoundingClientRect(), pane = listPane().getBoundingClientRect();
+    if (r.top < pane.top || r.bottom > pane.bottom) row.scrollIntoView({ block: "nearest" });
   };
 
   // --- Notes autosave (same behaviour as before, re-bound whenever the panel changes) ------------
@@ -268,7 +281,7 @@
         if (!r.ok || new URL(r.url).pathname === "/login") throw 0;
         return r.text().then((html) => {
           history.replaceState({}, "", back);
-          swap(html, back);
+          swap(html, back, { sameAccount: !form.dataset.leaves });
         });
       })
       .catch(() => { form.submit(); });
@@ -281,11 +294,13 @@
   });
   try {
     const saved = JSON.parse(sessionStorage.getItem(scrollKey) || "null");
-    if (saved && saved.list === browser.dataset.listUrl) window.scrollTo(0, saved.y);
+    if (saved && saved.list === browser.dataset.listUrl) {
+      if (wide.matches) listPane().scrollTop = saved.y; else window.scrollTo(0, saved.y);
+    }
     sessionStorage.removeItem(scrollKey);
   } catch (_) {}
   window.addEventListener("pagehide", () => {
-    try { sessionStorage.setItem(scrollKey, JSON.stringify({ list: browser.dataset.listUrl, y: scrollY })); } catch (_) {}
+    try { sessionStorage.setItem(scrollKey, JSON.stringify({ list: browser.dataset.listUrl, y: wide.matches ? listPane().scrollTop : scrollY })); } catch (_) {}
   });
   if (wide.matches) keepSelectedInView();
 })();
