@@ -408,8 +408,11 @@ def list_view(conn, args, keep_id=None):
 
 @app.get("/accounts")
 def accounts():
-    rows, list_args, _, q, status, sort = list_view(db.get_db(), request.args)
-    return render_template("accounts.html", rows=rows, q=q, status=status, sort=sort, list_args=list_args)
+    conn = db.get_db()
+    rows, list_args, _, q, status, sort = list_view(conn, request.args)
+    return render_template(
+        "accounts.html", rows=rows, q=q, status=status, sort=sort, list_args=list_args, stats=get_stats(conn),
+    )
 
 
 @app.post("/accounts/bulk")

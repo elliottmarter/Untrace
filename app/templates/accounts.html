@@ -3,6 +3,16 @@
 {% block content %}
 <h1>Accounts <span class="muted">· {{ rows|length }}</span></h1>
 
+{% if stats.total %}
+<section class="stats">
+  <div class="progress-label">
+    <strong>{{ stats.done }}</strong> of {{ stats.target }} accounts cleaned up
+    <span class="muted">({{ stats.pct }}%)</span>
+  </div>
+  {% with active = status %}{% include "_segbar.html" %}{% endwith %}
+</section>
+{% endif %}
+
 <form method="get" class="filters">
   <input type="search" name="q" value="{{ q }}" placeholder="Search name, domain, username, notes…">
   <select name="status">

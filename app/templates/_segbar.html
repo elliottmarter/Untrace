@@ -1,8 +1,12 @@
-{# Expects: stats. The segmented bar of accounts by status, shared by Cleanup and Triage. #}
-<div class="segbar" role="list" aria-label="Accounts by status">
+{# Expects: stats. Optional: active (the status the Accounts list is filtered by).
+   The segmented bar of accounts by status, shared by Cleanup, Triage and Accounts. #}
+<div class="segbar{{ ' filtering' if active in STATUSES }}" role="list" aria-label="Accounts by status">
   {% for key, label, count in stats.segments %}
-    <a class="seg st-{{ key }}" role="listitem" style="flex-grow: {{ count }}"
-       href="{{ url_for('accounts', status=key) }}" title="{{ count }} {{ label }}">
+    {% set on = active == key %}
+    {# On Accounts, the filtered status is picked out; click it again to show everything. #}
+    <a class="seg st-{{ key }}{{ ' active' if on }}" role="listitem" style="flex-grow: {{ count }}"
+       href="{{ url_for('accounts', status=None if on else key) }}"
+       title="{{ count }} {{ label }}{{ ' (click to show all)' if on }}"{% if on %} aria-current="true"{% endif %}>
       <b>{{ count }}</b> <span>{{ label }}</span>
     </a>
   {% endfor %}

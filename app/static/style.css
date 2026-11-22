@@ -259,3 +259,7 @@ tr[id] { scroll-margin-top: 30vh; }
 tr:target { animation: row-flash 2s ease-out; }
 @keyframes row-flash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } }
 @media (prefers-reduced-motion: reduce) { tr:target { animation: none; background: color-mix(in srgb, var(--accent) 12%, transparent); } }
+/* Accounts: the bar picks out the status you're filtering by. */
+.segbar.filtering .seg:not(.active) { opacity: .45; }
+.segbar.filtering .seg:not(.active):hover { opacity: .8; }
+.seg.active { box-shadow: inset 0 0 0 2px var(--on-color); }
