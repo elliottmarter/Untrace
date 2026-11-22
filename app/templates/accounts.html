@@ -1,67 +1,293 @@
 {% extends "base.html" %}
-{% block title %}Accounts · Account Cleanup{% endblock %}
+{% block title %}{% if a %}{{ a.name }} · {% endif %}Accounts · Account Cleanup{% endblock %}
+{% block main_attrs %} class="wide"{% endblock %}
 {% block content %}
-<h1>Accounts <span class="muted">· {{ rows|length }}</span></h1>
+{% set list_url = url_for('accounts', **list_args) %}
+{% set here = url_for('accounts', id=a.id, **list_args) if a else list_url %}
+<div class="browser{{ ' has-selection' if a }}" id="browser" data-list-url="{{ list_url }}">
 
-<form method="get" class="filters">
-  <input type="search" name="q" value="{{ q }}" placeholder="Search name, domain, username, notes…">
-  <select name="status">
-    <option value="">All statuses</option>
-    {% for key, label in STATUSES.items() %}
-      <option value="{{ key }}" {{ 'selected' if status == key }}>{{ label }}</option>
-    {% endfor %}
-    <option value="snoozed" {{ 'selected' if status == 'snoozed' }}>Snoozed</option>
-    <option value="vault" {{ 'selected' if status == 'vault' }}>Deleted but still in vault</option>
-  </select>
-  <select name="sort">
-    <option value="name" {{ 'selected' if sort == 'name' }}>Sort by name</option>
-    <option value="domain" {{ 'selected' if sort == 'domain' }}>Sort by domain</option>
-    <option value="status" {{ 'selected' if sort == 'status' }}>Sort by status</option>
-    <option value="updated" {{ 'selected' if sort == 'updated' }}>Oldest first</option>
-  </select>
-  <button class="btn small">Filter</button>
-</form>
+{# Left: the open account. #}
+<section class="detail-pane" id="detail-pane" aria-label="Account">
+  {% if a %}
+    <div class="pane-bar">
+      <a class="back-to-list" href="{{ list_url }}">← {{ STATUSES.get(status) or {'vault': 'Deleted but still in vault', 'snoozed': 'Snoozed'}.get(status) or ('Search results' if q else 'All accounts') }}</a>
+      <a class="pane-close" href="{{ list_url }}" title="Close" aria-label="Close">×</a>
+    </div>
 
-{% if rows %}
-<form method="post" action="{{ url_for('bulk_update') }}">
-  <input type="hidden" name="next" value="{{ request.full_path }}">
-  <div class="bulk">
-    <label><input type="checkbox" id="select-all"> Select all</label>
+    {% with next_url = here, detail = true %}{% include "_card.html" %}{% endwith %}
+
+    <section class="panel">
+      <h2 class="details-title">Details</h2>
+      <dl class="details">
+        <dt>URL</dt><dd>{% if a.url|weburl %}<a href="{{ a.url|weburl }}" target="_blank" rel="noopener noreferrer">{{ a.url }}</a>{% else %}{{ a.url or '—' }}{% endif %}</dd>
+        <dt>Username</dt><dd>{{ a.username or '—' }}</dd>
+        <dt>Imported</dt><dd>{{ a.imported_at|nicedate }}</dd>
+        {% if a.snoozed_until %}<dt>Snoozed until</dt><dd>{{ a.snoozed_until|nicedate }}</dd>{% endif %}
+        {% if a.vault_id %}<dt>Bitwarden</dt><dd>{{ 'Removed from vault' if a.vault_removed else 'Linked to vault item' }}</dd>{% endif %}
+      </dl>
+
+      <form method="post" action="{{ url_for('account_save', account_id=a.id) }}" class="stack" id="details-form">
+        <label>Notes
+          <textarea name="notes" rows="4" placeholder="e.g. emailed support 3 Nov, ticket #1234">{{ a.notes }}</textarea>
+        </label>
+        <span class="muted small" id="save-state" role="status" aria-live="polite">Changes save automatically.</span>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2 class="details-title">History</h2>
+      {% if events %}
+        <ul class="history">
+          {% for e in events %}
+            <li><span class="muted">{{ e.at|nicedate }}</span> {{ STATUSES.get(e.from_status, e.from_status) }} → <b>{{ STATUSES.get(e.to_status, e.to_status) }}</b></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No changes yet.</p>
+      {% endif %}
+    </section>
+
+    <form method="post" action="{{ url_for('remove_account', account_id=a.id) }}" data-leaves="1"
+          data-msg="Remove {{ a.name }} from the tracker? This only removes it from this app."
+          onsubmit="return confirm(this.dataset.msg);">
+      <input type="hidden" name="next" value="{{ list_url }}">
+      <button class="btn small ghost">Remove from tracker</button>
+    </form>
+  {% else %}
+    <div class="pane-empty">
+      <p><b>Pick an account from the list</b></p>
+      <p class="muted">It opens here, and the list keeps your filter and place while you work through it.
+        Use <kbd>↑</kbd> <kbd>↓</kbd> to move between accounts.</p>
+    </div>
+  {% endif %}
+</section>
+
+{# Right: the list. #}
+<section class="list-pane" id="list-pane" aria-label="Account list">
+  <h1>Accounts <span class="muted">· {{ matching }}</span></h1>
+
+  <form method="get" class="filters">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search name, domain, username, notes…">
     <select name="status">
-      <option value="">Mark selected as…</option>
-      {% for key, label in STATUSES.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
-    </select>
-    <button class="btn small">Apply</button>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th></th><th>Name</th><th>Username</th><th>Status</th><th>Last touched</th></tr></thead>
-      <tbody>
-      {% for a in rows %}
-        <tr>
-          <td><input type="checkbox" name="ids" value="{{ a.id }}"></td>
-          <td>
-            <a href="{{ url_for('account_detail', account_id=a.id) }}">{{ a.name }}</a>
-            {% if a.domain and a.domain != a.name|lower %}<div class="muted small">{{ a.domain }}</div>{% endif %}
-          </td>
-          <td class="small">{{ a.username }}</td>
-          <td><span class="badge st-{{ a.status }}">{{ STATUSES[a.status] }}</span>
-            {% if a.status in CLOSED and not a.vault_removed %}<div class="muted small">still in vault</div>{% endif %}</td>
-          <td class="small">{{ a.vault_updated|nicedate if a.vault_updated else '' }}</td>
-        </tr>
+      <option value="">All statuses</option>
+      {% for key, label in STATUSES.items() %}
+        <option value="{{ key }}" {{ 'selected' if status == key }}>{{ label }}</option>
       {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</form>
-{% else %}
-  <section class="empty"><p>No accounts match.</p></section>
-{% endif %}
+      <option value="snoozed" {{ 'selected' if status == 'snoozed' }}>Snoozed</option>
+      <option value="vault" {{ 'selected' if status == 'vault' }}>Deleted but still in vault</option>
+    </select>
+    <select name="sort">
+      <option value="name" {{ 'selected' if sort == 'name' }}>Sort by name</option>
+      <option value="domain" {{ 'selected' if sort == 'domain' }}>Sort by domain</option>
+      <option value="status" {{ 'selected' if sort == 'status' }}>Sort by status</option>
+      <option value="updated" {{ 'selected' if sort == 'updated' }}>Oldest first</option>
+    </select>
+    <button class="btn small">Filter</button>
+  </form>
+
+  {% if rows %}
+  <form method="post" action="{{ url_for('bulk_update') }}" id="bulk-form">
+    <input type="hidden" name="next" value="{{ here }}">
+    <div class="bulk">
+      <label><input type="checkbox" id="select-all"> Select all</label>
+      <select name="status">
+        <option value="">Mark selected as…</option>
+        {% for key, label in STATUSES.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select>
+      <button class="btn small">Apply</button>
+    </div>
+    <div class="table-wrap">
+      <table class="account-list">
+        <thead><tr><th></th><th>Name</th><th>Status</th><th class="col-touched">Last touched</th></tr></thead>
+        <tbody>
+        {% for r in rows %}
+          <tr data-href="{{ url_for('accounts', id=r.id, **list_args) }}"
+              class="{{ 'selected' if a and r.id == a.id }}{{ ' stale' if not r.matches }}"
+              {% if a and r.id == a.id %}aria-current="true"{% endif %}>
+            <td><input type="checkbox" name="ids" value="{{ r.id }}" aria-label="Select {{ r.name }}"></td>
+            <td>
+              <a class="row-link" href="{{ url_for('accounts', id=r.id, **list_args) }}">{{ r.name }}</a>
+              <div class="muted small">{% if r.domain and r.domain != r.name|lower %}{{ r.domain }}{% if r.username %} · {% endif %}{% endif %}{{ r.username }}</div>
+            </td>
+            <td><span class="badge st-{{ r.status }}">{{ STATUSES[r.status] }}</span>
+              {% if r.status in CLOSED and not r.vault_removed %}<div class="muted small">still in vault</div>{% endif %}
+              {% if not r.matches %}<div class="muted small">no longer matches</div>{% endif %}</td>
+            <td class="small col-touched">{{ r.vault_updated|nicedate if r.vault_updated else '' }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </form>
+  {% else %}
+    <section class="empty"><p>No accounts match.</p></section>
+  {% endif %}
+</section>
+
+</div>
 {% endblock %}
 {% block scripts %}
 <script>
-  const all = document.getElementById("select-all");
-  if (all) all.addEventListener("change", () =>
-    document.querySelectorAll('input[name="ids"]').forEach((cb) => (cb.checked = all.checked)));
+(() => {
+  const browser = document.getElementById("browser");
+  const wide = matchMedia("(min-width: 900px)");
+  const scrollKey = "accounts-scroll";
+
+  // --- Swapping in a new view without leaving the page -----------------------------------------
+  // Each view is a normal page (/accounts?status=delete&id=12), so reloads, bookmarks and the
+  // no-JavaScript fallback all work. With JavaScript, only the two panes are replaced and the list
+  // keeps its scroll position.
+  let loading = null;
+  const swap = (html, url) => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const next = doc.getElementById("browser");
+    if (!next) { location.href = url; return; }
+    const y = window.scrollY;
+    browser.className = next.className;
+    browser.dataset.listUrl = next.dataset.listUrl;
+    for (const id of ["detail-pane", "list-pane"]) {
+      document.getElementById(id).replaceWith(doc.getElementById(id));
+    }
+    document.title = doc.title;
+    // Messages (e.g. "Moved to the Bitwarden trash") come along with the new view.
+    const toasts = document.querySelector(".toasts");
+    doc.querySelectorAll(".toasts .flash").forEach((t) => toasts.append(t));
+    initToasts(toasts);
+    slideInEmail(document);
+    // On a wide screen the list stays where it was; on a phone, each view starts at the top.
+    window.scrollTo(0, wide.matches ? y : 0);
+    if (wide.matches) keepSelectedInView();
+    bindPane();
+  };
+
+  const go = (url, { push = true } = {}) => {
+    const req = loading = fetch(url, { headers: { "X-Requested-With": "fetch-page" } })
+      .then((r) => { if (r.redirected && new URL(r.url).pathname === "/login") throw 0; return r.text().then((t) => [t, r.url]); })
+      .then(([html, finalUrl]) => {
+        if (req !== loading) return;  // a newer click won
+        if (push) history.pushState({}, "", finalUrl); else history.replaceState({}, "", finalUrl);
+        swap(html, finalUrl);
+      })
+      .catch(() => { location.href = url; });
+    return req;
+  };
+
+  // Browser back/forward steps between accounts and lists.
+  window.addEventListener("popstate", () => go(location.href, { push: false }));
+
+  const keepSelectedInView = () => {
+    const row = document.querySelector(".account-list tr.selected");
+    if (!row) return;
+    const r = row.getBoundingClientRect();
+    const top = document.querySelector(".topbar").getBoundingClientRect().bottom;
+    if (r.top < top || r.bottom > innerHeight) row.scrollIntoView({ block: "nearest" });
+  };
+
+  // --- Notes autosave (same behaviour as before, re-bound whenever the panel changes) ------------
+  let notes = null;
+  const bindPane = () => {
+    const form = document.getElementById("details-form");
+    if (!form) { notes = null; return; }
+    const state = document.getElementById("save-state");
+    const snapshot = () => new URLSearchParams(new FormData(form)).toString();
+    const n = { form, saved: snapshot(), timer: null, inFlight: Promise.resolve() };
+    n.dirty = () => snapshot() !== n.saved;
+    n.save = () => {
+      clearTimeout(n.timer);
+      const body = snapshot();
+      if (body === n.saved) return n.inFlight;
+      state.textContent = "Saving…";
+      n.inFlight = fetch(form.action, {
+        method: "POST", body: new URLSearchParams(body), keepalive: true,
+        headers: { "X-Requested-With": "fetch" },
+      }).then((r) => {
+        if (!r.ok) throw new Error(r.status);
+        n.saved = body;
+        if (form.isConnected) state.textContent = snapshot() === n.saved ? "Saved" : "Unsaved changes";
+      }).catch(() => {
+        state.textContent = "Couldn't save. Check you're still signed in and try again.";
+      });
+      return n.inFlight;
+    };
+    form.addEventListener("input", () => {
+      state.textContent = "Unsaved changes";
+      clearTimeout(n.timer);
+      n.timer = setTimeout(n.save, 800);
+    });
+    form.addEventListener("focusout", n.save);
+    form.addEventListener("submit", (e) => { e.preventDefault(); n.save(); });
+    notes = n;
+  };
+  bindPane();
+  const saveNotes = () => (notes ? notes.save() : Promise.resolve());
+  window.addEventListener("pagehide", saveNotes);
+
+  // --- Opening accounts --------------------------------------------------------------------------
+  browser.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const link = e.target.closest("a[href]");
+    const row = e.target.closest(".account-list tr[data-href]");
+    // Clicking anywhere on a row opens it, except the checkbox.
+    if (!link && row && !e.target.closest("input, label")) {
+      e.preventDefault();
+      saveNotes().finally(() => go(row.dataset.href));
+      return;
+    }
+    if (!link || link.target === "_blank" || new URL(link.href).pathname !== "/accounts") return;
+    e.preventDefault();
+    saveNotes().finally(() => go(link.href));
+  });
+
+  // Up / down arrows move through the list (when you're not typing).
+  document.addEventListener("keydown", (e) => {
+    if (!["ArrowDown", "ArrowUp", "j", "k"].includes(e.key) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+    const rows = [...document.querySelectorAll(".account-list tr[data-href]")];
+    if (!rows.length) return;
+    const i = rows.findIndex((r) => r.classList.contains("selected"));
+    const down = e.key === "ArrowDown" || e.key === "j";
+    const target = i < 0 ? rows[0] : rows[i + (down ? 1 : -1)];
+    if (!target) return;
+    e.preventDefault();
+    saveNotes().finally(() => go(target.dataset.href, { push: false }));
+  });
+
+  // --- Forms in the panel: send in the background, then refresh both panes in place -------------
+  document.addEventListener("submit", (e) => {
+    const form = e.target;
+    if (e.defaultPrevented || form.method !== "post" || !browser.contains(form) || form.id === "details-form") return;
+    e.preventDefault();
+    const body = new FormData(form);
+    if (e.submitter && e.submitter.name) body.append(e.submitter.name, e.submitter.value);
+    // Removing an account closes it; everything else comes back to the same view.
+    const back = form.dataset.leaves ? browser.dataset.listUrl : location.pathname + location.search;
+    body.set("next", back);
+    saveNotes()
+      .then(() => fetch(form.action, { method: "POST", body }))
+      .then((r) => {
+        if (!r.ok || new URL(r.url).pathname === "/login") throw 0;
+        return r.text().then((html) => {
+          history.replaceState({}, "", back);
+          swap(html, back);
+        });
+      })
+      .catch(() => { form.submit(); });
+  });
+
+  // --- Select all, and the list's scroll position across full reloads -----------------------------
+  browser.addEventListener("change", (e) => {
+    if (e.target.id !== "select-all") return;
+    document.querySelectorAll('input[name="ids"]').forEach((cb) => (cb.checked = e.target.checked));
+  });
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(scrollKey) || "null");
+    if (saved && saved.list === browser.dataset.listUrl) window.scrollTo(0, saved.y);
+    sessionStorage.removeItem(scrollKey);
+  } catch (_) {}
+  window.addEventListener("pagehide", () => {
+    try { sessionStorage.setItem(scrollKey, JSON.stringify({ list: browser.dataset.listUrl, y: scrollY })); } catch (_) {}
+  });
+  if (wide.matches) keepSelectedInView();
+})();
 </script>
 {% endblock %}

@@ -23,7 +23,7 @@ Thank you.</textarea>
 <article class="card st-{{ a.status }}">
   <div class="card-head">
     <div>
-      <h3{% if detail %} class="title-lg"{% endif %}><a href="{{ url_for('account_detail', account_id=a.id) }}">{{ a.name }}</a></h3>
+      {% if detail %}<h3 class="title-lg">{{ a.name }}</h3>{% else %}<h3><a href="{{ url_for('account_detail', account_id=a.id) }}">{{ a.name }}</a></h3>{% endif %}
       <div class="meta">
         {% if a.domain %}<span>{% if a.url|weburl %}<a href="{{ a.url|weburl }}" target="_blank" rel="noopener noreferrer">{{ a.domain }}</a>{% else %}{{ a.domain }}{% endif %}</span>{% endif %}
         {% if a.username %}<span>{{ a.username }}</span>{% endif %}

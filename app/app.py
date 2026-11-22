@@ -374,10 +374,12 @@ def triage():
 
 @app.get("/accounts")
 def accounts():
+    """The account list on the right, with the selected account (?id=) open beside it on the left."""
     conn = db.get_db()
     q = request.args.get("q", "").strip()
     status = request.args.get("status", "")
     sort = request.args.get("sort", "name")
+    selected_id = request.args.get("id", type=int)
     where, params = [], []
     if status in STATUSES:
         where.append("status = ?")
@@ -390,12 +392,33 @@ def accounts():
     if q:
         where.append("(name LIKE ? OR domain LIKE ? OR username LIKE ? OR folder LIKE ? OR notes LIKE ?)")
         params += [f"%{q}%"] * 5
-    sql = "SELECT * FROM accounts"
+    sql = "SELECT *, 1 AS matches FROM accounts"
     if where:
-        sql += " WHERE " + " AND ".join(where)
+        match = " AND ".join(where)
+        sql = f"SELECT *, ({match}) AS matches FROM accounts WHERE ({match})"
+        params = params * 2
+        if selected_id:
+            # The open account stays in the list after a change moves it out of the filter, so the
+            # list doesn't jump while you work on it. It drops out once you pick another one.
+            sql += " OR id = ?"
+            params.append(selected_id)
     sql += " ORDER BY " + SORTS.get(sort, SORTS["name"])
     rows = conn.execute(sql, params).fetchall()
-    return render_template("accounts.html", rows=rows, q=q, status=status, sort=sort)
+
+    selected = events = None
+    if selected_id:
+        selected = conn.execute("SELECT * FROM accounts WHERE id = ?", (selected_id,)).fetchone()
+        if selected:
+            events = conn.execute(
+                "SELECT * FROM events WHERE account_id = ? ORDER BY at DESC, id DESC", (selected_id,)
+            ).fetchall()
+    # Links keep the current search, filter and sort.
+    list_args = {k: v for k, v in (("q", q), ("status", status), ("sort", sort if sort != "name" else "")) if v}
+    return render_template(
+        "accounts.html", rows=rows, q=q, status=status, sort=sort,
+        a=selected, events=events, list_args=list_args,
+        matching=sum(1 for r in rows if r["matches"]),
+    )
 
 
 @app.post("/accounts/bulk")
@@ -414,11 +437,9 @@ def bulk_update():
 
 @app.get("/account/<int:account_id>")
 def account_detail(account_id):
-    conn = db.get_db()
-    events = conn.execute(
-        "SELECT * FROM events WHERE account_id = ? ORDER BY at DESC, id DESC", (account_id,)
-    ).fetchall()
-    return render_template("account.html", a=get_account(conn, account_id), events=events)
+    """Accounts open in the panel beside the list."""
+    get_account(db.get_db(), account_id)
+    return redirect(url_for("accounts", id=account_id))
 
 
 @app.post("/account/<int:account_id>")
@@ -491,7 +512,8 @@ def remove_account(account_id):
     name = get_account(conn, account_id)["name"]
     conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
     conn.commit()
-    return redirect(url_for("accounts"))
+    flash(f"Removed {name} from the tracker.", "info")
+    return redirect(safe_next(url_for("accounts")))
 
 
 # --- import / export -----------------------------------------------------------
