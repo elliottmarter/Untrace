@@ -159,7 +159,7 @@
       <label>Model
         <input name="model" id="ai-model" value="{{ ai_model if ai_provider and ai_model else '' }}"
                placeholder="{{ ai_providers[ai_provider].model }}" spellcheck="false">
-        <span class="muted small">Leave empty for the default shown.</span>
+        <span class="muted small">Leave empty for the default shown: the provider's cheapest model, which is plenty for this. Bigger models cost much more per lookup.</span>
       </label>
       <label class="check"><input type="checkbox" name="redo" value="1"> Look up sites that already have an answer again</label>
       <div class="actions">

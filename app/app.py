@@ -569,7 +569,7 @@ def import_page():
         bw=bitwarden.status(),
         ai_providers=howto.PROVIDERS,
         ai_provider=db.get_setting("howto_provider", "anthropic"),
-        ai_model=db.get_setting("howto_model", ""),
+        ai_model="" if db.get_setting("howto_model", "") in howto.OLD_DEFAULTS else db.get_setting("howto_model", ""),
         ai_job=howto.status(),
         ai_todo=len(howto_targets(conn)),
         ai_to_delete=conn.execute("SELECT COUNT(*) FROM accounts WHERE status = 'delete'").fetchone()[0],

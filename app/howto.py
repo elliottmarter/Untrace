@@ -15,12 +15,14 @@ import time
 import urllib.error
 import urllib.request
 
+# Defaults are each provider's cheapest model that can search the web: a lookup is a short,
+# simple question, so a bigger model mostly costs more (with Claude, Opus is ~40x Haiku).
 PROVIDERS = {
-    "anthropic": {"label": "Claude (Anthropic)", "model": "claude-opus-5-5",
+    "anthropic": {"label": "Claude (Anthropic)", "model": "claude-haiku-5-5",
                   "key_hint": "sk-ant-…", "keys_url": "https://console.anthropic.com/settings/keys"},
-    "openai": {"label": "ChatGPT (OpenAI)", "model": "gpt-5",
+    "openai": {"label": "ChatGPT (OpenAI)", "model": "gpt-5-mini",
                "key_hint": "sk-…", "keys_url": "https://platform.openai.com/api-keys"},
-    "gemini": {"label": "Gemini (Google)", "model": "gemini-2.5-flash",
+    "gemini": {"label": "Gemini (Google)", "model": "gemini-2.5-flash-lite",
                "key_hint": "AIza…", "keys_url": "https://aistudio.google.com/app/apikey"},
 }
 
@@ -82,15 +84,24 @@ def _post(url, body, headers, timeout=180):
         raise HowtoError("The provider sent back something that wasn't JSON.") from None
 
 
+# Earlier defaults: a saved choice equal to one of these is treated as "use the default".
+OLD_DEFAULTS = {"claude-opus-5-5", "gpt-5", "gemini-2.5-flash"}
+
+# Web searches per site. Each search costs a fee and adds its results to the input tokens.
+MAX_SEARCHES = 2
+
+
 def ask_anthropic(key, model, prompt):
+    # The newer search tool (it filters results before the model reads them) isn't on Haiku.
+    tool = "web_search_20250305" if "haiku" in model else "web_search_20260209"
     data = _post(
         "https://api.anthropic.com/v1/messages",
         {
             "model": model,
-            "max_tokens": 16000,
+            "max_tokens": 4000,
             "system": SYSTEM_PROMPT,
             "output_config": {"effort": "low"},
-            "tools": [{"type": "web_search_20260209", "name": "web_search", "max_uses": 4}],
+            "tools": [{"type": tool, "name": "web_search", "max_uses": MAX_SEARCHES}],
             "messages": [{"role": "user", "content": prompt}],
         },
         {"x-api-key": key, "anthropic-version": "2023-06-01"},
@@ -106,7 +117,8 @@ def ask_anthropic(key, model, prompt):
 def ask_openai(key, model, prompt):
     data = _post(
         "https://api.openai.com/v1/responses",
-        {"model": model, "instructions": SYSTEM_PROMPT, "input": prompt, "tools": [{"type": "web_search"}]},
+        {"model": model, "instructions": SYSTEM_PROMPT, "input": prompt, "tools": [{"type": "web_search", "search_context_size": "low"}],
+         "max_tool_calls": MAX_SEARCHES, "reasoning": {"effort": "low"}},
         {"Authorization": f"Bearer {key}"},
     )
     text, found = [], []
