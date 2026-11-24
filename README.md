@@ -24,7 +24,11 @@ deleting the ones you no longer need — a little at a time.
    come first, then unreviewed ones — oldest-touched first, since those are most likely forgotten.
    Each card links to the site, shows every status as a button, and includes a GDPR erasure
    email template (subject and body, each with a copy button) for accounts you're deleting.
-4. **Track** each account as *To review → To delete → Deletion requested → Deleted* (or *Keeping* / *Site gone*).
+4. **How to delete** (optional): on the Import page, paste an API key for Claude, ChatGPT or Gemini to look up,
+   with web search, how to delete every account marked *To delete*. Each card then shows the answer with a link to
+   the deletion page or an **Email** button that opens the erasure request, addressed and filled in. Only each
+   account's website and name are sent. The key is used for that run only and never saved.
+5. **Track** each account as *To review → To delete → Deletion requested → Deleted* (or *Keeping* / *Site gone*).
    Requests older than 14 days resurface as follow-ups, and deleted accounts remind you to remove them
    from your password manager.
 
