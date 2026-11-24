@@ -1,8 +1,8 @@
 services:
-  account-cleanup:
+  untrace:
     image: ghcr.io/elliottmarter/account-cleanup:latest
     # build: .                     # use this instead of image to build from source
-    container_name: account-cleanup
+    container_name: untrace
     ports:
       - "8080:8080"
     environment:

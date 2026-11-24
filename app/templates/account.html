@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ a.name }} · Account Cleanup{% endblock %}
+{% block title %}{{ a.name }} · Untrace{% endblock %}
 {% block content %}
 {% set here = url_for('account_detail', account_id=a.id, **list_args) %}
 {% set list_url = url_for('accounts', **list_args) %}

@@ -1,4 +1,8 @@
-# Account Cleanup
+<p align="center"><img src="app/static/icon-512.png" alt="" width="96"></p>
+
+<h1 align="center">Untrace</h1>
+
+<p align="center"><em>Scrub your digital footprint, one old account at a time.</em></p>
 
 > [!WARNING]
 > **This app was written by AI (Claude) for my own personal use.**
@@ -39,7 +43,7 @@ deleting the ones you no longer need — a little at a time.
 ## Run it
 
 ```bash
-docker run -d --name account-cleanup -p 8080:8080 -v account-cleanup:/data -e TZ=Europe/London -e APP_USERNAME=me -e APP_PASSWORD=pick-a-password --restart unless-stopped ghcr.io/elliottmarter/account-cleanup:latest
+docker run -d --name untrace -p 8080:8080 -v untrace:/data -e TZ=Europe/London -e APP_USERNAME=me -e APP_PASSWORD=pick-a-password --restart unless-stopped ghcr.io/elliottmarter/account-cleanup:latest
 ```
 
 Change the username and password first: the container won't start without them. Then open
@@ -62,23 +66,27 @@ host folder. Re-importing a newer export is safe — existing accounts keep thei
 1. Open the Unraid terminal (`>_` icon, top right) and download the template:
 
    ```bash
-   wget -O /boot/config/plugins/dockerMan/templates-user/my-account-cleanup.xml https://raw.githubusercontent.com/elliottmarter/account-cleanup/main/unraid/account-cleanup.xml
+   wget -O /boot/config/plugins/dockerMan/templates-user/my-untrace.xml https://raw.githubusercontent.com/elliottmarter/account-cleanup/main/unraid/account-cleanup.xml
    ```
 
-2. Go to **Docker → Add Container**, pick **account-cleanup** from the *Template* dropdown,
+2. Go to **Docker → Add Container**, pick **untrace** from the *Template* dropdown,
    choose a **Username** and **Password** (both required), check the other settings and click **Apply**.
 
-Data is stored in `/mnt/user/appdata/account-cleanup/data`, so appdata backups include it. Unraid
+Data is stored in `/mnt/user/appdata/untrace/data`, so appdata backups include it. Unraid
 shows when a new version is available; click **Update** on the container to get it.
 
 ### Updating
 
 ```bash
 docker pull ghcr.io/elliottmarter/account-cleanup:latest
-docker rm -f account-cleanup
+docker rm -f untrace
 ```
 
-then run the `docker run` command again (your data stays in the volume). With Compose:
+then run the `docker run` command again (your data stays in the volume).
+
+> **Upgrading from Account Cleanup?** Untrace is the same app under a new name, and the image is
+> still `ghcr.io/elliottmarter/account-cleanup`. Existing containers keep working: just keep using
+> your current container name, volume and Unraid appdata path when you update. With Compose:
 `docker compose pull && docker compose up -d`.
 
 Version tags such as `:1.0.0` are published for tagged releases, if you'd rather pin a version.
@@ -156,7 +164,7 @@ columns and delete the rest.
 ## Build from source
 
 ```bash
-docker build -t account-cleanup .
+docker build -t untrace .
 ```
 
 Or without Docker:

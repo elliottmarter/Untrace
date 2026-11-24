@@ -815,7 +815,7 @@ def export_csv():
     return Response(
         out.getvalue(),
         mimetype="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=account-cleanup-{today()}.csv"},
+        headers={"Content-Disposition": f"attachment; filename=untrace-{today()}.csv"},
     )
 
 

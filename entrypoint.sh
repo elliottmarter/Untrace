@@ -4,7 +4,7 @@
 set -e
 
 if [ -z "$APP_USERNAME" ] || [ -z "$APP_PASSWORD" ]; then
-    echo "account-cleanup: APP_USERNAME and APP_PASSWORD must both be set. Refusing to start." >&2
+    echo "untrace: APP_USERNAME and APP_PASSWORD must both be set. Refusing to start." >&2
     exit 1
 fi
 
