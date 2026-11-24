@@ -194,6 +194,15 @@ main:has(.pager) { padding-bottom: 7rem; }
 details { margin-top: .8rem; }
 summary { cursor: pointer; color: var(--muted); }
 
+.howto { margin-top: 1rem; padding: .8rem 1rem; border-radius: 8px; background: var(--bg); }
+.howto h4 { margin: 0 0 .3rem; font-size: 1rem; }
+.howto p { margin: .3rem 0; }
+.howto .actions { margin-top: .5rem; }
+.howto-steps { margin: .6rem 0 .3rem; padding-left: 1.3rem; }
+.howto-steps li + li { margin-top: .2rem; }
+.howto-foot { margin-top: .6rem; overflow-wrap: anywhere; }
+.howto-progress { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; }
+.howto-progress progress { flex: 1; min-width: 12rem; height: .8rem; accent-color: var(--ok); }
 .email { margin-top: 1rem; }
 .email.slide-in { animation: email-slide .35s ease-out; }
 .email.slide-out { animation: email-slide .3s ease-in reverse forwards; }

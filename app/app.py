@@ -1,8 +1,10 @@
 import csv
 import hashlib
+import json
 import hmac
 import io
 import os
+import re
 import secrets
 import threading
 import time
@@ -11,10 +13,11 @@ from zoneinfo import ZoneInfo
 
 from urllib.parse import urlsplit
 
-from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, flash, jsonify, redirect, render_template, request, session, url_for
 
 import bitwarden
 import db
+import howto
 from bitwarden import BitwardenError
 from importer import ExportError, parse_export, vault_record
 
@@ -158,7 +161,7 @@ def logout():
 @app.before_request
 def same_origin_for_vault_actions():
     # The vault endpoints can delete passwords, so refuse POSTs another website triggers.
-    if request.method != "POST" or not request.path.startswith(("/bitwarden/", "/account/", "/login")):
+    if request.method != "POST" or not request.path.startswith(("/bitwarden/", "/account/", "/login", "/howto/")):
         return None
     origin = request.headers.get("Origin") or request.headers.get("Referer")
     if origin and origin != "null" and urlsplit(origin).netloc != request.host:
@@ -179,6 +182,7 @@ def inject_globals():
         "bw_enabled": bitwarden.configured(),
         "bw_unlocked": bitwarden.is_unlocked,
         "bw_last_sync": lambda: db.get_setting("bw_last_sync", ""),
+        "howto_for": howto_for,
     }
 
 
@@ -203,6 +207,13 @@ def ago(value):
         return f"{months} month{'s' if months != 1 else ''} ago"
     years = days // 365
     return f"{years} year{'s' if years != 1 else ''} ago"
+
+
+@app.template_filter("sourcename")
+def sourcename(url):
+    """A short name for a source link: its host, without www."""
+    host = urlsplit(url).netloc
+    return host[4:] if host.startswith("www.") else host
 
 
 @app.template_filter("weburl")
@@ -551,11 +562,98 @@ def remove_account(account_id):
 
 @app.get("/import")
 def import_page():
+    conn = db.get_db()
     return render_template(
         "import.html",
-        stats=get_stats(db.get_db()),
+        stats=get_stats(conn),
         bw=bitwarden.status(),
+        ai_providers=howto.PROVIDERS,
+        ai_provider=db.get_setting("howto_provider", "anthropic"),
+        ai_model=db.get_setting("howto_model", ""),
+        ai_job=howto.status(),
+        ai_todo=len(howto_targets(conn)),
+        ai_to_delete=conn.execute("SELECT COUNT(*) FROM accounts WHERE status = 'delete'").fetchone()[0],
     )
+
+
+# --- "How to delete" AI lookup -------------------------------------------------
+
+def site_key(a):
+    """Accounts on the same site share one answer."""
+    return (a["domain"] or a["name"] or "").strip().lower()
+
+
+def howto_for(a):
+    row = db.get_db().execute("SELECT * FROM howto WHERE site = ?", (site_key(a),)).fetchone()
+    if row is None:
+        return None
+    try:
+        data = json.loads(row["data"])
+    except ValueError:
+        return None
+    return {**data, "provider": howto.PROVIDERS.get(row["provider"], {}).get("label", row["provider"]),
+            "model": row["model"], "looked_up_at": row["looked_up_at"]}
+
+
+def howto_targets(conn, redo=False):
+    """[(site, name)] for every To delete account, one per site, skipping sites already looked up."""
+    done = set() if redo else {r["site"] for r in conn.execute("SELECT site FROM howto")}
+    sites = {}
+    for a in conn.execute(f"SELECT domain, name FROM accounts WHERE status = 'delete' ORDER BY {PICK_ORDER}"):
+        key = site_key(a)
+        if key and key not in done and key not in sites:
+            sites[key] = a["name"]
+    return list(sites.items())
+
+
+def save_howto(site, answer, provider, model):
+    """Called from the lookup thread, so it opens its own connection."""
+    conn = db.connect()
+    try:
+        conn.execute(
+            """INSERT INTO howto (site, data, provider, model, looked_up_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(site) DO UPDATE SET data = excluded.data, provider = excluded.provider,
+               model = excluded.model, looked_up_at = excluded.looked_up_at""",
+            (site, json.dumps(answer), provider, model, now_iso()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@app.post("/howto/start")
+def howto_start():
+    provider = request.form.get("provider", "")
+    key = request.form.get("api_key", "").strip()
+    if provider not in howto.PROVIDERS or not key:
+        flash("Pick a provider and paste an API key.", "error")
+        return redirect(url_for("import_page") + "#howto")
+    model = request.form.get("model", "").strip() or howto.PROVIDERS[provider]["model"]
+    if not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", model):
+        flash("That model name doesn't look right.", "error")
+        return redirect(url_for("import_page") + "#howto")
+    targets = howto_targets(db.get_db(), redo=request.form.get("redo") == "1")
+    if not targets:
+        flash("Nothing to look up: every To delete account already has an answer.", "info")
+        return redirect(url_for("import_page") + "#howto")
+    # Remember the choice of provider and model (not the key) for next time.
+    db.set_setting("howto_provider", provider)
+    db.set_setting("howto_model", model)
+    db.get_db().commit()
+    if not howto.start(provider, key, model, targets, save_howto):
+        flash("A lookup is already running.", "info")
+    return redirect(url_for("import_page") + "#howto")
+
+
+@app.post("/howto/cancel")
+def howto_cancel():
+    howto.cancel()
+    return redirect(url_for("import_page") + "#howto")
+
+
+@app.get("/howto/status")
+def howto_status():
+    return jsonify(howto.status() or {})
 
 
 # --- Bitwarden vault -----------------------------------------------------------
@@ -728,6 +826,7 @@ def reset():
         return redirect(url_for("import_page"))
     conn = db.get_db()
     conn.execute("DELETE FROM daily_picks")
+    conn.execute("DELETE FROM howto")
     conn.execute("DELETE FROM events")
     conn.execute("DELETE FROM accounts")
     conn.execute("DELETE FROM settings WHERE key = 'picks_generated_for'")

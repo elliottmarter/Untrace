@@ -1,5 +1,37 @@
 {% extends "base.html" %}
 {% block title %}Import · Account Cleanup{% endblock %}
+{% block scripts %}
+<script>
+  // Provider picker: show that provider's default model and where to get a key.
+  const provider = document.getElementById("ai-provider");
+  if (provider) {
+    const model = document.getElementById("ai-model");
+    provider.addEventListener("change", () => {
+      const opt = provider.selectedOptions[0];
+      model.value = "";
+      model.placeholder = opt.dataset.model;
+      document.getElementById("ai-key").placeholder = opt.dataset.hint;
+      document.getElementById("ai-keys-link").href = opt.dataset.keys;
+    });
+  }
+  // Progress while the lookup runs; reload once it's finished to show the result.
+  const progress = document.getElementById("howto-progress");
+  if (progress) {
+    const bar = progress.querySelector("progress");
+    const text = document.getElementById("howto-progress-text");
+    const tick = () => fetch(progress.dataset.status, { headers: { "X-Requested-With": "fetch" } })
+      .then((r) => r.json())
+      .then((job) => {
+        if (job.state !== "running") { location.reload(); return; }
+        bar.max = job.total; bar.value = job.done;
+        text.textContent = `Looked up ${job.done} of ${job.total}` + (job.current ? ` · now ${job.current}` : "");
+        setTimeout(tick, 2000);
+      })
+      .catch(() => setTimeout(tick, 5000));
+    setTimeout(tick, 2000);
+  }
+</script>
+{% endblock %}
 {% block content %}
 <h1>Import accounts</h1>
 
@@ -75,6 +107,68 @@
     <li>Afterwards, <b>permanently delete both the original and the edited export</b> (and empty the recycle bin).</li>
   </ol>
   <p class="muted">Other password managers work too (Chrome, Firefox, 1Password, LastPass, KeePass): keep the name, URL and username columns and delete the rest. A Bitwarden <code>.json</code> export is also accepted, but it still contains your passwords when uploaded.</p>
+</section>
+
+<section class="panel" id="howto">
+  <h2>Find out how to delete</h2>
+  <p class="muted">
+    A one-off job: ask an AI, with web search, how to delete each account you've marked <b>To delete</b>.
+    The answers appear as <b>How to delete</b> on Cleanup and on each account's page, with a link to the
+    deletion page or a ready-to-send email where there is one. Only each account's website and name are
+    sent, never usernames, passwords or notes. AI answers can be wrong, so check before you rely on them.
+  </p>
+  {% set job = ai_job %}
+  {% if job and job.state == 'running' %}
+    <div class="howto-progress" id="howto-progress" data-status="{{ url_for('howto_status') }}">
+      <progress max="{{ job.total }}" value="{{ job.done }}"></progress>
+      <span id="howto-progress-text">Looked up {{ job.done }} of {{ job.total }}{% if job.current %} · now {{ job.current }}{% endif %}</span>
+    </div>
+    <form method="post" action="{{ url_for('howto_cancel') }}" class="actions">
+      <button class="btn ghost small">Stop</button>
+    </form>
+    <p class="muted small">You can leave this page; the job keeps running. Your API key is held in memory only until it finishes.</p>
+  {% else %}
+    {% if job %}
+      <div class="flash {{ 'error' if job.state == 'failed' else 'info' }}">
+        {% if job.state == 'failed' %}Stopped after {{ job.done }} of {{ job.total }}: {{ job.error }}
+        {% elif job.state == 'cancelled' %}Stopped after {{ job.done }} of {{ job.total }}. {{ job.found }} answer{{ 's' if job.found != 1 }} saved.
+        {% else %}Finished: {{ job.found }} of {{ job.total }} site{{ 's' if job.total != 1 }} looked up.{% endif %}
+        {% if job.errors %}
+          <details><summary>{{ job.errors|length }} problem{{ 's' if job.errors|length != 1 }}</summary>
+            <ul class="small">{% for e in job.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+          </details>
+        {% endif %}
+      </div>
+    {% endif %}
+    {% if not ai_to_delete %}
+      <p>No accounts are marked To delete yet. Mark some on Triage or Accounts first.</p>
+    {% else %}
+    <form method="post" action="{{ url_for('howto_start') }}" class="stack" autocomplete="off">
+      <label>AI provider
+        <select name="provider" id="ai-provider">
+          {% for key, p in ai_providers.items() %}
+            <option value="{{ key }}" data-model="{{ p.model }}" data-hint="{{ p.key_hint }}" data-keys="{{ p.keys_url }}" {{ 'selected' if key == ai_provider }}>{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>API key
+        <input type="password" name="api_key" id="ai-key" required autocomplete="off" spellcheck="false"
+               placeholder="{{ ai_providers[ai_provider].key_hint }}">
+        <span class="muted small">Used for this run only and never saved. <a id="ai-keys-link" href="{{ ai_providers[ai_provider].keys_url }}" target="_blank" rel="noopener noreferrer">Get a key</a></span>
+      </label>
+      <label>Model
+        <input name="model" id="ai-model" value="{{ ai_model if ai_provider and ai_model else '' }}"
+               placeholder="{{ ai_providers[ai_provider].model }}" spellcheck="false">
+        <span class="muted small">Leave empty for the default shown.</span>
+      </label>
+      <label class="check"><input type="checkbox" name="redo" value="1"> Look up sites that already have an answer again</label>
+      <div class="actions">
+        <button class="btn ok">Look up {{ ai_todo }} site{{ 's' if ai_todo != 1 }}</button>
+        <span class="muted small">{{ ai_to_delete }} account{{ 's' if ai_to_delete != 1 }} marked To delete{% if ai_todo < ai_to_delete %}; the rest already have an answer or share a site{% endif %}.</span>
+      </div>
+    </form>
+    {% endif %}
+  {% endif %}
 </section>
 
 <section class="panel">

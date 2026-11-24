@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS daily_picks (
     PRIMARY KEY (day, account_id)
 );
 
+-- "How to delete" answers from the AI lookup, one per site (accounts.domain, or the name if there's none).
+CREATE TABLE IF NOT EXISTS howto (
+    site TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    looked_up_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
