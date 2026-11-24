@@ -3,13 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Account Cleanup{% endblock %}</title>
+  <title>{% block title %}Untrace{% endblock %}</title>
   <script>try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (_) {}</script>
+  <link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('cleanup_page') }}">Account Cleanup</a>
+    <a class="brand" href="{{ url_for('cleanup_page') }}"><img src="{{ url_for('static', filename='icon.svg') }}" alt="" width="24" height="24">Untrace</a>
     <div class="topbar-right">
     {% if signed_in %}
     <nav>

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>account-cleanup</Name>
+  <Name>untrace</Name>
   <Repository>ghcr.io/elliottmarter/account-cleanup:latest</Repository>
   <Registry>https://github.com/elliottmarter/account-cleanup/pkgs/container/account-cleanup</Registry>
   <Network>bridge</Network>
@@ -8,12 +8,13 @@
   <Shell>sh</Shell>
   <Support>https://github.com/elliottmarter/account-cleanup/issues</Support>
   <Project>https://github.com/elliottmarter/account-cleanup</Project>
-  <Overview>Track your online accounts from a Bitwarden (or other password manager) export and delete the old ones a little at a time. Passwords are never stored. AI-written personal project - use at your own risk.</Overview>
+  <Overview>Untrace: track your online accounts from a Bitwarden (or other password manager) export and delete the old ones a little at a time. Passwords are never stored. AI-written personal project - use at your own risk.</Overview>
+  <Icon>https://raw.githubusercontent.com/elliottmarter/account-cleanup/main/app/static/icon-512.png</Icon>
   <Category>Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/elliottmarter/account-cleanup/main/unraid/account-cleanup.xml</TemplateURL>
   <Config Name="Web UI port" Target="8080" Default="8080" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
-  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/account-cleanup/data" Mode="rw" Description="Where the tracker database is stored" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/account-cleanup/data</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/untrace/data" Mode="rw" Description="Where the tracker database is stored" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/untrace/data</Config>
   <Config Name="Time zone" Target="TZ" Default="Europe/London" Description="Decides when the daily suggestion rolls over" Type="Variable" Display="always" Required="false" Mask="false">Europe/London</Config>
   <Config Name="Username" Target="APP_USERNAME" Default="" Description="Required. Username for the web UI login" Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="Password" Target="APP_PASSWORD" Default="" Description="Required. Password for the web UI login. The container won't start without a username and password." Type="Variable" Display="always" Required="true" Mask="true"></Config>

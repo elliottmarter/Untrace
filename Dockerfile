@@ -5,7 +5,7 @@ RUN npm install -g --omit=dev "@bitwarden/cli@${BW_CLI_VERSION}" && npm cache cl
 
 FROM python:3.12-slim
 
-LABEL org.opencontainers.image.title="Account Cleanup" \
+LABEL org.opencontainers.image.title="Untrace" \
       org.opencontainers.image.description="Self-hosted tracker for gradually deleting old online accounts" \
       org.opencontainers.image.licenses="MIT"
 
