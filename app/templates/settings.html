@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Import · Untrace{% endblock %}
+{% block title %}Settings · Untrace{% endblock %}
 {% block scripts %}
 <script>
   // Provider picker: show that provider's default model and where to get a key.
@@ -33,7 +33,7 @@
 </script>
 {% endblock %}
 {% block content %}
-<h1>Import accounts</h1>
+<h1>Settings</h1>
 
 <section class="panel" id="bitwarden">
   <h2>Sync from Bitwarden</h2>
@@ -80,8 +80,9 @@
   {% endif %}
 </section>
 
-<section class="panel">
-  <form method="post" enctype="multipart/form-data" class="stack">
+<section class="panel" id="import">
+  <h2>Import from a file</h2>
+  <form method="post" action="{{ url_for('import_upload') }}" enctype="multipart/form-data" class="stack">
     <label>Export file (.csv recommended, with password columns removed — see below)
       <input type="file" name="export" accept=".json,.csv,application/json,text/csv" required>
     </label>

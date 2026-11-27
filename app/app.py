@@ -558,13 +558,19 @@ def remove_account(account_id):
     return redirect(safe_next(url_for("accounts")))
 
 
-# --- import / export -----------------------------------------------------------
+# --- settings: import / export -------------------------------------------------
 
 @app.get("/import")
-def import_page():
+def old_import_page():
+    # The page used to be called Import; keep old links and bookmarks working.
+    return redirect(url_for("settings_page", **request.args))
+
+
+@app.get("/settings")
+def settings_page():
     conn = db.get_db()
     return render_template(
-        "import.html",
+        "settings.html",
         stats=get_stats(conn),
         bw=bitwarden.status(),
         ai_providers=howto.PROVIDERS,
@@ -627,28 +633,28 @@ def howto_start():
     key = request.form.get("api_key", "").strip()
     if provider not in howto.PROVIDERS or not key:
         flash("Pick a provider and paste an API key.", "error")
-        return redirect(url_for("import_page") + "#howto")
+        return redirect(url_for("settings_page") + "#howto")
     model = request.form.get("model", "").strip() or howto.PROVIDERS[provider]["model"]
     if not re.fullmatch(r"[A-Za-z0-9._:-]{1,100}", model):
         flash("That model name doesn't look right.", "error")
-        return redirect(url_for("import_page") + "#howto")
+        return redirect(url_for("settings_page") + "#howto")
     targets = howto_targets(db.get_db(), redo=request.form.get("redo") == "1")
     if not targets:
         flash("Nothing to look up: every To delete account already has an answer.", "info")
-        return redirect(url_for("import_page") + "#howto")
+        return redirect(url_for("settings_page") + "#howto")
     # Remember the choice of provider and model (not the key) for next time.
     db.set_setting("howto_provider", provider)
     db.set_setting("howto_model", model)
     db.get_db().commit()
     if not howto.start(provider, key, model, targets, save_howto):
         flash("A lookup is already running.", "info")
-    return redirect(url_for("import_page") + "#howto")
+    return redirect(url_for("settings_page") + "#howto")
 
 
 @app.post("/howto/cancel")
 def howto_cancel():
     howto.cancel()
-    return redirect(url_for("import_page") + "#howto")
+    return redirect(url_for("settings_page") + "#howto")
 
 
 @app.get("/howto/status")
@@ -664,14 +670,14 @@ def bitwarden_unlock():
         bitwarden.unlock(request.form.get("master_password", ""))
     except BitwardenError as exc:
         flash(f"Couldn't unlock: {exc}", "error")
-        return redirect(url_for("import_page", next=request.form.get("next") or None))
-    return redirect(safe_next(url_for("import_page")))
+        return redirect(url_for("settings_page", next=request.form.get("next") or None))
+    return redirect(safe_next(url_for("settings_page")))
 
 
 @app.post("/bitwarden/lock")
 def bitwarden_lock():
     bitwarden.lock()
-    return redirect(safe_next(url_for("import_page")))
+    return redirect(safe_next(url_for("settings_page")))
 
 
 def link_or_insert(conn, r, stamp):
@@ -709,7 +715,7 @@ def bitwarden_sync():
         items = bitwarden.fetch_logins()
     except BitwardenError as exc:
         flash(f"Sync failed: {exc}", "error")
-        return redirect(url_for("import_page"))
+        return redirect(url_for("settings_page"))
 
     conn = db.get_db()
     stamp = now_iso()
@@ -733,7 +739,7 @@ def bitwarden_sync():
     if gone:
         msg += f" {gone} no longer in the vault."
     flash(msg + " Passwords were not stored.", "success")
-    return redirect(url_for("import_page"))
+    return redirect(url_for("settings_page"))
 
 
 @app.post("/account/<int:account_id>/vault-trash")
@@ -759,12 +765,12 @@ def import_upload():
     upload = request.files.get("export")
     if not upload or not upload.filename:
         flash("Choose a file to upload.", "error")
-        return redirect(url_for("import_page"))
+        return redirect(url_for("settings_page"))
     try:
         records, source = parse_export(upload.filename, upload.read())
     except ExportError as exc:
         flash(str(exc), "error")
-        return redirect(url_for("import_page"))
+        return redirect(url_for("settings_page"))
 
     conn = db.get_db()
     stamp = now_iso()
@@ -823,7 +829,7 @@ def export_csv():
 def reset():
     if request.form.get("confirm", "").strip().upper() != "DELETE":
         flash("Type DELETE to confirm the reset.", "error")
-        return redirect(url_for("import_page"))
+        return redirect(url_for("settings_page"))
     conn = db.get_db()
     conn.execute("DELETE FROM daily_picks")
     conn.execute("DELETE FROM howto")
@@ -832,7 +838,7 @@ def reset():
     conn.execute("DELETE FROM settings WHERE key = 'picks_generated_for'")
     conn.commit()
     flash("All tracker data was deleted.", "info")
-    return redirect(url_for("import_page"))
+    return redirect(url_for("settings_page"))
 
 
 if __name__ == "__main__":

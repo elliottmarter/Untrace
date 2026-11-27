@@ -19,7 +19,7 @@
       <a href="{{ url_for('cleanup_page') }}" class="{{ 'active' if ep == 'cleanup_page' }}">Cleanup</a>
       <a href="{{ url_for('triage') }}" class="{{ 'active' if ep == 'triage' }}">Triage{% if nav_to_review %} <span class="pill">{{ nav_to_review }}</span>{% endif %}</a>
       <a href="{{ url_for('accounts') }}" class="{{ 'active' if ep in ('accounts', 'account_detail') }}">Accounts</a>
-      <a href="{{ url_for('import_page') }}" class="{{ 'active' if ep == 'import_page' }}">Import</a>
+      <a href="{{ url_for('settings_page') }}" class="{{ 'active' if ep == 'settings_page' }}">Settings</a>
       <form method="post" action="{{ url_for('logout') }}"><button class="nav-btn">Sign out</button></form>
     </nav>
     {% endif %}

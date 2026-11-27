@@ -74,7 +74,7 @@ Thank you.{% endset %}
     <div class="actions status-picker">
       {% if linked and not a.vault_removed %}
         {% if not bw_unlocked() %}
-        <a class="btn small" href="{{ url_for('import_page', next=next_url) }}">🔒 Unlock vault to delete from Bitwarden</a>
+        <a class="btn small" href="{{ url_for('settings_page', next=next_url) }}">🔒 Unlock vault to delete from Bitwarden</a>
         {% else %}
         <form method="post" action="{{ url_for('vault_trash', account_id=a.id) }}"
               data-msg="Move {{ a.name }}{% if a.username %} ({{ a.username }}){% endif %} to the Bitwarden trash? You can restore it from the trash for 30 days."
