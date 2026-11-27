@@ -28,7 +28,7 @@ deleting the ones you no longer need — a little at a time.
    come first, then unreviewed ones — oldest-touched first, since those are most likely forgotten.
    Each card links to the site, shows every status as a button, and includes a GDPR erasure
    email template (subject and body, each with a copy button) for accounts you're deleting.
-4. **How to delete** (optional): on the Import page, paste an API key for Claude, ChatGPT or Gemini to look up,
+4. **How to delete** (optional): on the Settings page, paste an API key for Claude, ChatGPT or Gemini to look up,
    with web search, how to delete every account marked *To delete*. Each card then shows the answer with a link to
    the deletion page or an **Email** button that opens the erasure request, addressed and filled in. Only each
    account's website and name are sent. The key is used for that run only and never saved.
@@ -59,7 +59,7 @@ docker compose up -d
 
 Data lives in `/data/accounts.db` (SQLite) inside the container, so keep `/data` on a volume or
 host folder. Re-importing a newer export is safe — existing accounts keep their status.
-**Download tracker as CSV** on the Import page exports everything.
+**Download tracker as CSV** on the Settings page exports everything.
 
 ### On Unraid
 
@@ -117,7 +117,7 @@ bitwarden.com, the EU cloud and Vaultwarden.
 1. In the Bitwarden web vault go to **Settings → Security → Keys → View API key** and copy the
    `client_id` and `client_secret` into `BW_CLIENTID` and `BW_CLIENTSECRET` on the container.
    (For the EU cloud or Vaultwarden, also set `BW_SERVER`.)
-2. Open **Import**, type your master password and click **Unlock**.
+2. Open **Settings**, type your master password and click **Unlock**.
 3. Click **Sync now**. Only each login's name, website, username, folder and dates are copied in.
    Accounts you already track (from an earlier import) are matched by site and username and keep their status.
 4. On an account's page, or on a finished card, **Delete from Bitwarden** moves that login to your
