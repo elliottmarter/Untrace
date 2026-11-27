@@ -51,7 +51,12 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          # Fixed names, not github.repository: after the repo was renamed to Untrace that started
+          # publishing to ghcr.io/elliottmarter/untrace, so the documented account-cleanup image
+          # (which existing installs and the Unraid template pull) stopped getting updates.
+          images: |
+            ghcr.io/elliottmarter/account-cleanup
+            ghcr.io/elliottmarter/untrace
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
